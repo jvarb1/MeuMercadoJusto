@@ -9,16 +9,48 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import br.com.joaovictor.meumercadojusto.db.DatabaseHelper
+import br.com.joaovictor.meumercadojusto.db.DatabaseInitializer
+import br.com.joaovictor.meumercadojusto.repository.CestaRepository
+import br.com.joaovictor.meumercadojusto.viewmodel.CestaViewModel
+import br.com.joaovictor.meumercadojusto.viewmodel.CestaViewModelFactory
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     onNavigateToSearch: () -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    // Inicializar ViewModel
+    val repository = remember {
+        CestaRepository(DatabaseHelper.getInstance(context))
+    }
+    
+    val viewModel: CestaViewModel = viewModel(
+        factory = CestaViewModelFactory(repository)
+    )
+    
+    val uiState by viewModel.uiState.collectAsState()
+    
+    // Inicializar banco e calcular cesta na primeira vez
+    LaunchedEffect(Unit) {
+        scope.launch {
+            DatabaseInitializer.initialize(context)
+            viewModel.calcularCestaMaisBarata()
+        }
+    }
+    
+    val melhorCesta = uiState.resultadosCesta.firstOrNull()
+    val piorCesta = uiState.resultadosCesta.lastOrNull()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -67,7 +99,7 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     Text(
-                        text = "Atacadão",
+                        text = melhorCesta?.estabelecimento?.nome ?: "Carregando...",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -78,32 +110,35 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     Text(
-                        text = "Valor da Cesta: R$ 89,50",
+                        text = "Valor da Cesta: R$ ${String.format("%.2f", melhorCesta?.precoTotal ?: 0.0)}",
                         fontSize = 16.sp,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
                     
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "💰 Economia: R$ 15,30",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier
-                                .padding(8.dp)
-                                .fillMaxWidth(),
-                            textAlign = TextAlign.Center
-                        )
+                    melhorCesta?.economia?.let { economia ->
+                        if (economia > 0) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "💰 Economia: R$ ${String.format("%.2f", economia)}",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier
+                                        .padding(8.dp)
+                                        .fillMaxWidth(),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -132,7 +167,7 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     Text(
-                        text = "Master Supermercado",
+                        text = piorCesta?.estabelecimento?.nome ?: "Carregando...",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onErrorContainer,
@@ -143,32 +178,38 @@ fun MainScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     Text(
-                        text = "Valor da Cesta: R$ 104,80",
+                        text = "Valor da Cesta: R$ ${String.format("%.2f", piorCesta?.precoTotal ?: 0.0)}",
                         fontSize = 16.sp,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
                     
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "💸 Mais caro: R$ 15,30",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onError,
-                            modifier = Modifier
-                                .padding(8.dp)
-                                .fillMaxWidth(),
-                            textAlign = TextAlign.Center
-                        )
+                    melhorCesta?.let { melhor ->
+                        piorCesta?.let { pior ->
+                            val diferenca = pior.precoTotal - melhor.precoTotal
+                            if (diferenca > 0) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.error
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "💸 Mais caro: R$ ${String.format("%.2f", diferenca)}",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onError,
+                                        modifier = Modifier
+                                            .padding(8.dp)
+                                            .fillMaxWidth(),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

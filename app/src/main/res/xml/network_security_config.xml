@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Permitir cleartext (HTTP) apenas para a API do governo -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">api.sefaz.al.gov.br</domain>
+    </domain-config>
+    
+    <!-- Bloquear cleartext para todos os outros domínios (padrão seguro) -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
+
